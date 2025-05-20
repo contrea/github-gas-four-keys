@@ -1,208 +1,278 @@
 const githubEndpoint = "https://api.github.com/graphql";
 
-const repositoryNames = JSON.parse(PropertiesService.getScriptProperties().getProperty("GITHUB_REPO_NAMES"));
-const repositoryOwner = PropertiesService.getScriptProperties().getProperty("GITHUB_REPO_OWNER");
-const githubAPIKey = PropertiesService.getScriptProperties().getProperty("GITHUB_API_TOKEN");
+const repositoryNames = JSON.parse(
+  PropertiesService.getScriptProperties().getProperty("GITHUB_REPO_NAMES")
+);
+const repositoryOwner =
+  PropertiesService.getScriptProperties().getProperty("GITHUB_REPO_OWNER");
+const githubAPIKey =
+  PropertiesService.getScriptProperties().getProperty("GITHUB_API_TOKEN");
 
 const defaultSheet = SpreadsheetApp.getActiveSpreadsheet();
 
 function initialize() {
-
   const pullRequestsSheetName = "プルリク情報";
   const pullRequestsSheet = getOrCreateSheet(pullRequestsSheetName);
-  pullRequestsSheet.getRange(1, 1, 1, 10)
-    .setValues([[
-      "メンバー名",
-      "ブランチ名",
-      "PR本文",
-      "マージ済",
-      "初コミット日時",
-      "マージ日時",
-      "マージまでの時間(hours)",
-      "リポジトリ",
-      "障害発生判定",
-      "障害対応PR",
-    ]])
+  pullRequestsSheet
+    .getRange(1, 1, 1, 10)
+    .setValues([
+      [
+        "メンバー名",
+        "ブランチ名",
+        "PR本文",
+        "マージ済",
+        "初コミット日時",
+        "マージ日時",
+        "マージまでの時間(hours)",
+        "リポジトリ",
+        "障害発生判定",
+        "障害対応PR",
+      ],
+    ])
     .setBackgroundRGB(224, 224, 224);
 
   const settingsSheetName = "分析設定";
   const settingsSheet = getOrCreateSheet(settingsSheetName);
 
-  settingsSheet.getRange(1, 1, 2, 2)
-    .setValues([
-      ["集計メンバー", "集計可否(TRUEかFALSEを入力してください)"],
-      [`=unique('${pullRequestsSheetName}'!A2:A100000000)`, ""]
+  settingsSheet.getRange(1, 1, 2, 2).setValues([
+    ["集計メンバー", "集計可否(TRUEかFALSEを入力してください)"],
+    [`=unique('${pullRequestsSheetName}'!A2:A100000000)`, ""],
   ]);
 
-  settingsSheet.getRange(1, 1, 1, 2)
-    .setBackgroundRGB(224, 224, 224);
+  settingsSheet.getRange(1, 1, 1, 2).setBackgroundRGB(224, 224, 224);
 
-  settingsSheet.getRange(1, 4, 1, 2)
+  settingsSheet
+    .getRange(1, 4, 1, 2)
     .setValues([["キー名", "値"]])
     .setBackgroundRGB(224, 224, 224);
 
-  settingsSheet.getRange(2, 4, 15, 2)
-    .setValues([
-      ["移動平均のウィンドウ幅(日)", "28"],
-      ["修復/巻き直しPRのブランチ名の検索ルール(正規表現)", "hotfix|revert"],
-      ["障害修復PRのブランチ名の検索ルール(正規表現)", "hotfix"],
-      ["デプロイ頻度のElite判定条件(1日あたり平均N回以上PRがマージされていればElite)", "0.4285714286"],
-      ["デプロイ頻度のHigh判定条件(1日あたり平均N回以上PRがマージされていればHigh)", "0.1428571429"],
-      ["デプロイ頻度のMedium判定条件(1日あたり平均N回以上PRがマージされていればMedium)", "0.03333333333"],
-      ["変更リードタイムのElite判定条件(修復/巻き戻しを除くPRが初コミットからマージされるまで平均N時間以内ならElite)", "24"],
-      ["変更リードタイムのHigh判定条件(修復/巻き戻しを除くPRが初コミットからマージされるまで平均N時間以内ならHigh)", "168"],
-      ["変更リードタイムのMedium判定条件(修復/巻き戻しを除くPRが初コミットからマージされるまで平均N時間以内ならMedium)", "720"],
-      ["変更障害率のElite判定条件(全PRのうち修復/巻き戻しPRの割合がN%以下ならElite)", "0.15"],
-      ["変更障害率のHigh判定条件(全PRのうち修復/巻き戻しPRの割合がN%以下ならHigh)", "0.3"],
-      ["変更障害率のMedium判定条件(全PRのうち修復/巻き戻しPRの割合がN%以下ならMedium)", "0.45"],
-      ["平均修復時間のElite判定条件(修復PRが初コミットからマージされるまで平均N時間以内ならElite)", "24"],
-      ["平均修復時間のHigh判定条件(修復PRが初コミットからマージされるまで平均N時間以内ならHigh)", "168"],
-      ["平均修復時間のMeidum定条件(修復PRが初コミットからマージされるまで平均N時間以内ならMedium", "720"],
-    ]);
+  settingsSheet.getRange(2, 4, 15, 2).setValues([
+    ["移動平均のウィンドウ幅(日)", "28"],
+    ["修復/巻き直しPRのブランチ名の検索ルール(正規表現)", "hotfix|revert"],
+    ["障害修復PRのブランチ名の検索ルール(正規表現)", "hotfix"],
+    [
+      "デプロイ頻度のElite判定条件(1日あたり平均N回以上PRがマージされていればElite)",
+      "0.4285714286",
+    ],
+    [
+      "デプロイ頻度のHigh判定条件(1日あたり平均N回以上PRがマージされていればHigh)",
+      "0.1428571429",
+    ],
+    [
+      "デプロイ頻度のMedium判定条件(1日あたり平均N回以上PRがマージされていればMedium)",
+      "0.03333333333",
+    ],
+    [
+      "変更リードタイムのElite判定条件(修復/巻き戻しを除くPRが初コミットからマージされるまで平均N時間以内ならElite)",
+      "24",
+    ],
+    [
+      "変更リードタイムのHigh判定条件(修復/巻き戻しを除くPRが初コミットからマージされるまで平均N時間以内ならHigh)",
+      "168",
+    ],
+    [
+      "変更リードタイムのMedium判定条件(修復/巻き戻しを除くPRが初コミットからマージされるまで平均N時間以内ならMedium)",
+      "720",
+    ],
+    [
+      "変更障害率のElite判定条件(全PRのうち修復/巻き戻しPRの割合がN%以下ならElite)",
+      "0.15",
+    ],
+    [
+      "変更障害率のHigh判定条件(全PRのうち修復/巻き戻しPRの割合がN%以下ならHigh)",
+      "0.3",
+    ],
+    [
+      "変更障害率のMedium判定条件(全PRのうち修復/巻き戻しPRの割合がN%以下ならMedium)",
+      "0.45",
+    ],
+    [
+      "平均修復時間のElite判定条件(修復PRが初コミットからマージされるまで平均N時間以内ならElite)",
+      "24",
+    ],
+    [
+      "平均修復時間のHigh判定条件(修復PRが初コミットからマージされるまで平均N時間以内ならHigh)",
+      "168",
+    ],
+    [
+      "平均修復時間のMeidum定条件(修復PRが初コミットからマージされるまで平均N時間以内ならMedium",
+      "720",
+    ],
+  ]);
 
   const fourKeysSheetName = "FourKeys計測結果";
   const fourKeysSheet = getOrCreateSheet(fourKeysSheetName);
 
-  fourKeysSheet.getRange(1, 1, 2, 9)
+  fourKeysSheet
+    .getRange(1, 1, 2, 9)
     .setValues([
       [
         "集計日",
-        "デプロイ頻度", "",
-        "変更のリードタイム", "",
-        "変更失敗率", "",
-        "平均復旧時間", ""
+        "デプロイ頻度",
+        "",
+        "変更のリードタイム",
+        "",
+        "変更失敗率",
+        "",
+        "平均復旧時間",
+        "",
       ],
       [
         "",
-        "回数", "ランク",
-        "時間(hours)", "ランク",
-        "割合(%)", "ランク",
-        "時間(hours)", "ランク"
-      ]])
-    .setBackgroundRGB(
-      224, 224, 224
-    );
+        "回数",
+        "ランク",
+        "時間(hours)",
+        "ランク",
+        "割合(%)",
+        "ランク",
+        "時間(hours)",
+        "ランク",
+      ],
+    ])
+    .setBackgroundRGB(224, 224, 224);
   const formatRanges = [
     fourKeysSheet.getRange("C3:C1000"),
     fourKeysSheet.getRange("E3:E1000"),
     fourKeysSheet.getRange("G3:G1000"),
-    fourKeysSheet.getRange("I3:I1000")
+    fourKeysSheet.getRange("I3:I1000"),
   ];
   const rules = fourKeysSheet.getConditionalFormatRules();
-  rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo("Elite")
-    .setBackground("#b7e1cd")
-    .setRanges(formatRanges)
-    .build());
-  rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo("High")
-    .setBackground("#c9daf8")
-    .setRanges(formatRanges)
-    .build());
-  rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo("Low")
-    .setBackground("#f4cccc")
-    .setRanges(formatRanges)
-    .build());
-  rules.push(SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo("Medium")
-    .setBackground("#fff2cc")
-    .setRanges(formatRanges)
-    .build());
+  rules.push(
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("Elite")
+      .setBackground("#b7e1cd")
+      .setRanges(formatRanges)
+      .build()
+  );
+  rules.push(
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("High")
+      .setBackground("#c9daf8")
+      .setRanges(formatRanges)
+      .build()
+  );
+  rules.push(
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("Low")
+      .setBackground("#f4cccc")
+      .setRanges(formatRanges)
+      .build()
+  );
+  rules.push(
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("Medium")
+      .setBackground("#fff2cc")
+      .setRanges(formatRanges)
+      .build()
+  );
   fourKeysSheet.setConditionalFormatRules(rules);
 
-  fourKeysSheet.getRange(3, 2, 1, 8)
-    .setValues([[
-      `=SUM(MAP('${settingsSheetName}'!B$2:B$1000, '${settingsSheetName}'!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), COUNTIFS('${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!I$2:I$100000000, FALSE, '${pullRequestsSheetName}'!A$2:A$100000000, a), 0))))/'${settingsSheetName}'!E$2`,
-      `=IFS(B3>='${settingsSheetName}'!E$5, "Elite", B3>='${settingsSheetName}'!E$6, "High", B3>='${settingsSheetName}'!E$7, "Medium", TRUE, "Low")`,
-      `=IF(B3 > 0, SUM(MAP('${settingsSheetName}'!B$2:B$1000, '${settingsSheetName}'!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), SUMIFS('${pullRequestsSheetName}'!G$2:G$100000000, '${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!I$2:I$100000000, FALSE, '${pullRequestsSheetName}'!A$2:A$100000000, a), 0)))) / (B3*'${settingsSheetName}'!E$2), 0)`,
-      `=IFS(D3<='${settingsSheetName}'!E$8, "Elite", D3<='${settingsSheetName}'!E$9, "High", D3<='${settingsSheetName}'!E$10, "Medium", TRUE, "Low")`,
-      `=IF(B3 > 0, SUM(MAP(${settingsSheetName}!B$2:B$1000, ${settingsSheetName}!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), COUNTIFS('${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!I$2:I$100000000, TRUE, '${pullRequestsSheetName}'!A$2:A$100000000, a), 0))))/(B3*'${settingsSheetName}'!E$2), 0)`,
-      `=IFS(F3<='${settingsSheetName}'!E$11, "Elite", F3<='${settingsSheetName}'!E$12, "High", F3<='${settingsSheetName}'!E$13, "Medium", TRUE, "Low")`,
-      `=IF(SUM(MAP(${settingsSheetName}!B$2:B$1000, ${settingsSheetName}!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), COUNTIFS('${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!J$2:J$100000000, TRUE, '${pullRequestsSheetName}'!A$2:A$100000000, a))))) > 0, SUM(MAP(${settingsSheetName}!B$2:B$1000, ${settingsSheetName}!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), SUMIFS('${pullRequestsSheetName}'!G$2:G$100000000, '${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!J$2:J$100000000, TRUE, '${pullRequestsSheetName}'!A$2:A$100000000, a)))))/SUM(MAP(${settingsSheetName}!B$2:B$1000, ${settingsSheetName}!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), COUNTIFS('${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!J$2:J$100000000, TRUE, '${pullRequestsSheetName}'!A$2:A$100000000, a))))), 0)`,
-      `=IFS(H3<='${settingsSheetName}'!E$14, "Elite", H3<='${settingsSheetName}'!E$15, "High", H3<='${settingsSheetName}'!E$16, "Medium", TRUE, "Low")`
-    ]])
-    .setNumberFormats([[
-      "#,##0.00", "@",
-      "#,##0.00", "@",
-      "0.00%", "@",
-      "#,##0.00", "@",
-    ]]);
-  fourKeysSheet.getRange(3, 2, 1, 8).copyTo(
-    fourKeysSheet.getRange(4, 2, 4, 8)
-  );
+  fourKeysSheet
+    .getRange(3, 2, 1, 8)
+    .setValues([
+      [
+        `=SUM(MAP('${settingsSheetName}'!B$2:B$1000, '${settingsSheetName}'!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), COUNTIFS('${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!I$2:I$100000000, FALSE, '${pullRequestsSheetName}'!A$2:A$100000000, a), 0))))/'${settingsSheetName}'!E$2`,
+        `=IFS(B3>='${settingsSheetName}'!E$5, "Elite", B3>='${settingsSheetName}'!E$6, "High", B3>='${settingsSheetName}'!E$7, "Medium", TRUE, "Low")`,
+        `=IF(B3 > 0, SUM(MAP('${settingsSheetName}'!B$2:B$1000, '${settingsSheetName}'!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), SUMIFS('${pullRequestsSheetName}'!G$2:G$100000000, '${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!I$2:I$100000000, FALSE, '${pullRequestsSheetName}'!A$2:A$100000000, a), 0)))) / (B3*'${settingsSheetName}'!E$2), 0)`,
+        `=IFS(D3<='${settingsSheetName}'!E$8, "Elite", D3<='${settingsSheetName}'!E$9, "High", D3<='${settingsSheetName}'!E$10, "Medium", TRUE, "Low")`,
+        `=IF(B3 > 0, SUM(MAP(${settingsSheetName}!B$2:B$1000, ${settingsSheetName}!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), COUNTIFS('${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!I$2:I$100000000, TRUE, '${pullRequestsSheetName}'!A$2:A$100000000, a), 0))))/(B3*'${settingsSheetName}'!E$2), 0)`,
+        `=IFS(F3<='${settingsSheetName}'!E$11, "Elite", F3<='${settingsSheetName}'!E$12, "High", F3<='${settingsSheetName}'!E$13, "Medium", TRUE, "Low")`,
+        `=IF(SUM(MAP(${settingsSheetName}!B$2:B$1000, ${settingsSheetName}!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), COUNTIFS('${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!J$2:J$100000000, TRUE, '${pullRequestsSheetName}'!A$2:A$100000000, a))))) > 0, SUM(MAP(${settingsSheetName}!B$2:B$1000, ${settingsSheetName}!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), SUMIFS('${pullRequestsSheetName}'!G$2:G$100000000, '${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!J$2:J$100000000, TRUE, '${pullRequestsSheetName}'!A$2:A$100000000, a)))))/SUM(MAP(${settingsSheetName}!B$2:B$1000, ${settingsSheetName}!A$2:A$1000, LAMBDA(b, a, IF(OR(b<>FALSE, ISBLANK(b)), COUNTIFS('${pullRequestsSheetName}'!F$2:F$100000000, ">=" & A3-'${settingsSheetName}'!E$2,'${pullRequestsSheetName}'!F$2:F$100000000, "<" & A3, '${pullRequestsSheetName}'!J$2:J$100000000, TRUE, '${pullRequestsSheetName}'!A$2:A$100000000, a))))), 0)`,
+        `=IFS(H3<='${settingsSheetName}'!E$14, "Elite", H3<='${settingsSheetName}'!E$15, "High", H3<='${settingsSheetName}'!E$16, "Medium", TRUE, "Low")`,
+      ],
+    ])
+    .setNumberFormats([
+      ["#,##0.00", "@", "#,##0.00", "@", "0.00%", "@", "#,##0.00", "@"],
+    ]);
+  fourKeysSheet.getRange(3, 2, 1, 8).copyTo(fourKeysSheet.getRange(4, 2, 4, 8));
   const today = new Date();
-  fourKeysSheet.getRange(3, 1, 5, 1).setValues(
-    [4,3,2,1,0].map((numberOfTwoWeek) => [Utilities.formatDate(new Date(new Date().setDate(today.getDate() - 14*numberOfTwoWeek)), "JST", "yyyy-MM-dd")])
-  );
-  fourKeysSheet.getRange(8, 1, 1, 1).setValues([
-    ["移行のデータの統計値を取得する場合はB~I列を上からペーストしA列は任意の値を入力てください。"]
-  ]);
+  fourKeysSheet
+    .getRange(3, 1, 5, 1)
+    .setValues(
+      [4, 3, 2, 1, 0].map((numberOfTwoWeek) => [
+        Utilities.formatDate(
+          new Date(new Date().setDate(today.getDate() - 14 * numberOfTwoWeek)),
+          "JST",
+          "yyyy-MM-dd"
+        ),
+      ])
+    );
+  fourKeysSheet
+    .getRange(8, 1, 1, 1)
+    .setValues([
+      [
+        "移行のデータの統計値を取得する場合はB~I列を上からペーストしA列は任意の値を入力てください。",
+      ],
+    ]);
 
-  const dfLtChart = fourKeysSheet.newChart()
+  const dfLtChart = fourKeysSheet
+    .newChart()
     .addRange(fourKeysSheet.getRange("A1:A1000"))
     .addRange(fourKeysSheet.getRange("B1:B1000"))
     .addRange(fourKeysSheet.getRange("D1:D1000"))
     .setChartType(Charts.ChartType.COMBO)
     .setNumHeaders(1)
     .setOption("title", "デプロイ頻度と変更リードタイム")
-    .setOption("series",[
-      { targetAxisIndex: 0, legend: "デプロイ頻度(1日あたり)"},
-      { targetAxisIndex: 1, legend: "変更リードタイム"},
+    .setOption("series", [
+      { targetAxisIndex: 0, legend: "デプロイ頻度(1日あたり)" },
+      { targetAxisIndex: 1, legend: "変更リードタイム" },
     ])
     .setOption("vAxes", [
       {
         title: "回数",
-        minValue: 0
+        minValue: 0,
       },
       {
         title: "時間",
-        minValue: 0
+        minValue: 0,
       },
     ])
     .setOption("hAxes", {
-      title: "Week"
+      title: "Week",
     })
     .setPosition(1, 10, 0, 0)
     .build();
   fourKeysSheet.insertChart(dfLtChart);
 
-  const incidentChart = fourKeysSheet.newChart()
+  const incidentChart = fourKeysSheet
+    .newChart()
     .addRange(fourKeysSheet.getRange("A1:A1000"))
     .addRange(fourKeysSheet.getRange("F1:F1000"))
     .addRange(fourKeysSheet.getRange("H1:H1000"))
     .setChartType(Charts.ChartType.COMBO)
     .setNumHeaders(1)
     .setOption("title", "変更障害率と平均復旧時間")
-    .setOption("series",[
-      { targetAxisIndex: 0, legend: "変更障害率"},
-      { targetAxisIndex: 1, legend: "平均修復時間"},
+    .setOption("series", [
+      { targetAxisIndex: 0, legend: "変更障害率" },
+      { targetAxisIndex: 1, legend: "平均修復時間" },
     ])
     .setOption("vAxes", [
       {
         title: "％",
-        minValue: 0
+        minValue: 0,
       },
       {
         title: "時間",
-        minValue: 0
+        minValue: 0,
       },
     ])
     .setOption("hAxes", {
-      title: "Week"
+      title: "Week",
     })
     .setPosition(20, 10, 0, 0)
     .build();
   fourKeysSheet.insertChart(incidentChart);
-  ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === "getAllRepos").forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.getProjectTriggers()
+    .filter((t) => t.getHandlerFunction() === "getAllRepos")
+    .forEach((t) => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger("getAllRepos")
     .timeBased()
-    .onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(0)
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(0)
     .create();
 }
 
 function getAllRepos() {
-
   let i = 0;
   repositoryNames.forEach((repositoryName) => {
     const pullRequests = getPullRequests(repositoryName);
@@ -210,10 +280,11 @@ function getAllRepos() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(`プルリク情報`);
     for (const pullRequest of pullRequests) {
-
       let firstCommitDate = null;
       if (pullRequest.commits.nodes[0].commit.committedDate) {
-        firstCommitDate = new Date(pullRequest.commits.nodes[0].commit.committedDate);
+        firstCommitDate = new Date(
+          pullRequest.commits.nodes[0].commit.committedDate
+        );
       }
       let mergedAt = null;
       if (pullRequest.mergedAt) {
@@ -224,15 +295,24 @@ function getAllRepos() {
       sheet.getRange(index, 2).setValue(pullRequest.headRefName);
       sheet.getRange(index, 3).setValue(pullRequest.bodyText);
       sheet.getRange(index, 4).setValue(pullRequest.merged);
-      sheet.getRange(index, 5).setValue(!!firstCommitDate ? formatDate(firstCommitDate) : "");
+      sheet
+        .getRange(index, 5)
+        .setValue(!!firstCommitDate ? formatDate(firstCommitDate) : "");
       sheet.getRange(index, 6).setValue(!!mergedAt ? formatDate(mergedAt) : "");
-      sheet.getRange(index, 7).setValue(
-        (!!firstCommitDate && !!mergedAt) ?
-        (mergedAt.getTime() - firstCommitDate.getTime()) / 60 / 60 / 1000 :
-        "");
+      sheet
+        .getRange(index, 7)
+        .setValue(
+          !!firstCommitDate && !!mergedAt
+            ? (mergedAt.getTime() - firstCommitDate.getTime()) / 60 / 60 / 1000
+            : ""
+        );
       sheet.getRange(index, 8).setValue(repositoryName);
-      sheet.getRange(index, 9).setValue(`=REGEXMATCH(B${index}, '分析設定'!$E$3)`);
-      sheet.getRange(index, 10).setValue(`=REGEXMATCH(B${index}, '分析設定'!$E$4)`);
+      sheet
+        .getRange(index, 9)
+        .setValue(`=REGEXMATCH(B${index}, '分析設定'!$E$3)`);
+      sheet
+        .getRange(index, 10)
+        .setValue(`=REGEXMATCH(B${index}, '分析設定'!$E$4)`);
 
       i++;
     }
@@ -274,20 +354,23 @@ function getPullRequests(repositoryName) {
       }
     }`;
     const option = {
-      method: 'post',
-      contentType: 'application/json',
+      method: "post",
+      contentType: "application/json",
       headers: {
-        Authorization: 'bearer ' + githubAPIKey
+        Authorization: "bearer " + githubAPIKey,
       },
-      payload: JSON.stringify({query: graphql}),
+      payload: JSON.stringify({ query: graphql }),
     };
     const res = UrlFetchApp.fetch(githubEndpoint, option);
     const json = JSON.parse(res.getContentText());
-    resultPullRequests = resultPullRequests.concat(json.data.repository.pullRequests.nodes)
+    resultPullRequests = resultPullRequests.concat(
+      json.data.repository.pullRequests.nodes
+    );
     if (!json.data.repository.pullRequests.pageInfo.hasNextPage) {
       break;
     }
-    after = ', after: "' + json.data.repository.pullRequests.pageInfo.endCursor + '"';
+    after =
+      ', after: "' + json.data.repository.pullRequests.pageInfo.endCursor + '"';
   }
 
   return resultPullRequests;
@@ -298,14 +381,309 @@ function formatDate(date) {
    日付フォーマットヘルパ関数
   */
   const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const hour = date.getHours().toString().padStart(2, '0');
-  const minute = date.getMinutes().toString().padStart(2, '0');
-  const second = date.getSeconds().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
+  const hour = date.getHours().toString().padStart(2, "0");
+  const minute = date.getMinutes().toString().padStart(2, "0");
+  const second = date.getSeconds().toString().padStart(2, "0");
   return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
 function getOrCreateSheet(sheetName) {
-  return defaultSheet.getSheetByName(sheetName) || defaultSheet.insertSheet(sheetName);
+  return (
+    defaultSheet.getSheetByName(sheetName) ||
+    defaultSheet.insertSheet(sheetName)
+  );
+}
+
+function getAllPullRequestsDetailed() {
+  // 実行開始時間記録
+  const startTime = new Date().getTime();
+  const MAX_EXECUTION_TIME = 1700 * 1000; // 1700秒（1800秒の制限に対して余裕を持たせる）
+
+  // データシート取得または作成（まだなければヘッダー行も設定）
+  const dataSheet = getOrCreateDetailedPRSheet();
+
+  // 進捗管理シート取得または作成
+  const progressSheet = getOrCreateProgressSheet();
+
+  // 進捗状態を取得
+  let currentRepoIndex = Number(
+    getProgressValue(progressSheet, "リポジトリインデックス") || 0
+  );
+  let currentCursor =
+    getProgressValue(progressSheet, "ページネーションカーソル") || "";
+  let startRow = Number(getProgressValue(progressSheet, "次開始行") || 2);
+
+  let row = startRow;
+  let repoIndex = currentRepoIndex;
+  let cursor = currentCursor;
+  let isTimeUp = false;
+
+  // リポジトリ処理のループ
+  while (repoIndex < repositoryNames.length && !isTimeUp) {
+    const repositoryName = repositoryNames[repoIndex];
+
+    // 時間チェック
+    if (new Date().getTime() - startTime > MAX_EXECUTION_TIME) {
+      isTimeUp = true;
+      break;
+    }
+
+    // PRデータの取得（カーソル対応）
+    const { pullRequests, nextCursor, hasNextPage } =
+      getPullRequestsWithReviews(repositoryName, cursor);
+
+    // 取得したPRデータを処理
+    for (const pr of pullRequests) {
+      // データシートに出力
+      writeDetailedPRToSheet(dataSheet, row, pr, repositoryName);
+      row++;
+
+      // 時間チェック（100件ごとまたは定期的に）
+      if (
+        row % 100 === 0 &&
+        new Date().getTime() - startTime > MAX_EXECUTION_TIME
+      ) {
+        isTimeUp = true;
+        break;
+      }
+    }
+
+    // 次のページがあるかチェック
+    if (hasNextPage) {
+      cursor = nextCursor;
+      // 進捗を保存
+      updateProgress(progressSheet, repoIndex, cursor, row);
+    } else {
+      // このリポジトリは完了、次のリポジトリへ
+      repoIndex++;
+      cursor = "";
+      // 進捗を保存
+      updateProgress(progressSheet, repoIndex, cursor, row);
+    }
+  }
+
+  // 全リポジトリの処理が完了したかチェック
+  const isAllCompleted = repoIndex >= repositoryNames.length && !isTimeUp;
+  // 進捗を保存（完了フラグなし）
+  updateProgress(progressSheet, repoIndex, cursor, row);
+
+  // 実行結果を返す
+  return isTimeUp
+    ? "時間制限のため処理を中断しました。次回実行時に続きから処理されます。"
+    : "すべてのリポジトリの処理が完了しました。";
+}
+
+function getOrCreateDetailedPRSheet() {
+  const sheetName = "プルリクALLデータ";
+  let sheet = defaultSheet.getSheetByName(sheetName);
+
+  if (!sheet) {
+    sheet = defaultSheet.insertSheet(sheetName);
+    // ヘッダー行の設定
+    sheet
+      .getRange(1, 1, 1, 12)
+      .setValues([
+        [
+          "メンバー名",
+          "ブランチ名",
+          "PR本文",
+          "マージ済",
+          "初コミット日時",
+          "マージ日時",
+          "マージまでの時間(hours)",
+          "リポジトリ",
+          "障害発生判定",
+          "障害対応PR",
+          "レビュー者",
+          "初レビュー日時",
+        ],
+      ]);
+    sheet.getRange(1, 1, 1, 12).setBackgroundRGB(224, 224, 224);
+    sheet.setFrozenRows(1);
+  }
+
+  return sheet;
+}
+
+function getOrCreateProgressSheet() {
+  const sheetName = "PRデータ進捗管理";
+  let sheet = defaultSheet.getSheetByName(sheetName);
+
+  if (!sheet) {
+    sheet = defaultSheet.insertSheet(sheetName);
+    // ヘッダーと初期値の設定
+    sheet.getRange(1, 1, 4, 2).setValues([
+      ["項目", "値"],
+      ["リポジトリインデックス", "0"],
+      ["ページネーションカーソル", ""],
+      ["次開始行", "2"],
+    ]);
+
+    // 最終更新日時の追加
+    sheet
+      .getRange(5, 1, 1, 2)
+      .setValues([["最終更新日時", new Date().toISOString()]]);
+
+    sheet.getRange(1, 1, 1, 2).setBackgroundRGB(224, 224, 224);
+  }
+
+  return sheet;
+}
+
+function getProgressValue(sheet, key) {
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === key) {
+      return data[i][1].toString();
+    }
+  }
+  return null;
+}
+
+function updateProgress(sheet, repoIndex, cursor, nextRow) {
+  // 値の更新
+  updateProgressValue(sheet, "リポジトリインデックス", repoIndex.toString());
+  updateProgressValue(sheet, "ページネーションカーソル", cursor);
+  updateProgressValue(sheet, "次開始行", nextRow.toString());
+  updateProgressValue(sheet, "最終更新日時", new Date().toISOString());
+}
+
+function updateProgressValue(sheet, key, value) {
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === key) {
+      sheet.getRange(i + 1, 2).setValue(value);
+      return;
+    }
+  }
+  // キーが見つからない場合は追加
+  const lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow + 1, 1, 1, 2).setValues([[key, value]]);
+}
+
+function resetProgress(sheet) {
+  updateProgressValue(sheet, "リポジトリインデックス", "0");
+  updateProgressValue(sheet, "ページネーションカーソル", "");
+  updateProgressValue(sheet, "次開始行", "2");
+  updateProgressValue(sheet, "最終更新日時", new Date().toISOString());
+}
+
+function getPullRequestsWithReviews(repositoryName, after) {
+  let resultPullRequests = [];
+  let afterCursor = after || "";
+  let endCursor = "";
+  let hasNextPage = false;
+
+  const graphql = `query{
+    repository(name: "${repositoryName}", owner: "${repositoryOwner}"){
+      pullRequests(first: 100 ${
+        afterCursor ? ', after: "' + afterCursor + '"' : ""
+      }) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          author {
+            login
+          }
+          headRefName
+          bodyText
+          merged
+          mergedAt
+          commits(first: 1) {
+            nodes {
+              commit {
+                committedDate
+              }
+            }
+          }
+          reviews(first: 10) {
+            nodes {
+              author {
+                login
+              }
+              createdAt
+            }
+          }
+        }
+      }
+    }
+  }`;
+
+  const option = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      Authorization: "bearer " + githubAPIKey,
+    },
+    payload: JSON.stringify({ query: graphql }),
+  };
+
+  const res = UrlFetchApp.fetch(githubEndpoint, option);
+  const json = JSON.parse(res.getContentText());
+
+  resultPullRequests = json.data.repository.pullRequests.nodes;
+  hasNextPage = json.data.repository.pullRequests.pageInfo.hasNextPage;
+  endCursor = json.data.repository.pullRequests.pageInfo.endCursor;
+
+  return {
+    pullRequests: resultPullRequests,
+    nextCursor: endCursor,
+    hasNextPage: hasNextPage,
+  };
+}
+
+function writeDetailedPRToSheet(sheet, row, pullRequest, repositoryName) {
+  let firstCommitDate = null;
+  if (pullRequest.commits.nodes[0]?.commit?.committedDate) {
+    firstCommitDate = new Date(
+      pullRequest.commits.nodes[0].commit.committedDate
+    );
+  }
+
+  let mergedAt = null;
+  if (pullRequest.mergedAt) {
+    mergedAt = new Date(pullRequest.mergedAt);
+  }
+
+  // レビュー情報の処理
+  const reviews = pullRequest.reviews?.nodes || [];
+  const reviewers = Array.from(
+    new Set(reviews.map((review) => review.author?.login).filter(Boolean))
+  ).join(", ");
+
+  // 初回レビュー日時を特定
+  let firstReviewDate = null;
+  if (reviews.length > 0) {
+    // レビュー日時でソート
+    reviews.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    firstReviewDate = reviews[0]?.createdAt
+      ? new Date(reviews[0].createdAt)
+      : null;
+  }
+
+  // シートに書き込み
+  sheet
+    .getRange(row, 1, 1, 12)
+    .setValues([
+      [
+        pullRequest.author?.login || "",
+        pullRequest.headRefName || "",
+        pullRequest.bodyText || "",
+        pullRequest.merged || false,
+        firstCommitDate ? formatDate(firstCommitDate) : "",
+        mergedAt ? formatDate(mergedAt) : "",
+        firstCommitDate && mergedAt
+          ? (mergedAt.getTime() - firstCommitDate.getTime()) / (60 * 60 * 1000)
+          : "",
+        repositoryName,
+        `=REGEXMATCH(B${row}, '分析設定'!$E$3)`,
+        `=REGEXMATCH(B${row}, '分析設定'!$E$4)`,
+        reviewers,
+        firstReviewDate ? formatDate(firstReviewDate) : "",
+      ],
+    ]);
 }
